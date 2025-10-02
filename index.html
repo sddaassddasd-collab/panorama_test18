@@ -1,21 +1,307 @@
-<audio id="bgAudio" src="audio.mp3" autoplay></audio>
-<script>
-  window.addEventListener('DOMContentLoaded', () => {
-    const audio = document.getElementById('bgAudio');
-    audio.play().catch(err => {
-      console.warn('自動播放失敗，需要使用者互動：', err);
-      // 顯示一個播放按鈕
-      const btn = document.createElement('button');
-      btn.textContent = "▶ 播放音樂";
-      btn.style.position = 'fixed';
-      btn.style.top = '12px';
-      btn.style.left = '12px';
-      btn.style.zIndex = 1000;
-      document.body.appendChild(btn);
-      btn.addEventListener('click', () => {
-        audio.play();
-        btn.remove();
-      });
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pannellum 截圖 + 人物拼圖 + 國旗PNG（emoji選單）</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
+<style>
+  html,body{height:100%;margin:0;background:#0f172a;color:#e2e8f0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC","Helvetica Neue",Arial,sans-serif}
+  #panorama{position:absolute;inset:0;z-index:0}
+
+  /* 中央人物與右側國旗（會被合成） */
+  .character{
+    position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    display:flex;flex-direction:column;align-items:center;z-index:20;
+    pointer-events:none;
+  }
+  .character img{max-width:150px;height:auto;display:block;}
+  .flag{
+    position:fixed;top:50%;right:12px;transform:translateY(-50%);
+    z-index:20;pointer-events:none;
+  }
+  .flag img{height:64px;width:auto;display:block}
+
+  /* 底部控制面板（可收合；不會被截圖） */
+  .controls{
+    position:fixed;left:0;right:0;bottom:0;
+    background:rgba(15,23,42,.9);backdrop-filter:blur(6px);
+    border-top:1px solid rgba(148,163,184,.3);
+    max-height:40%;overflow-y:auto;
+    transition:transform 0.3s ease;
+    z-index:40;padding:10px;
+  }
+  .controls.collapsed{ transform:translateY(calc(100% - 30px)); }
+  .controls h3{margin:6px 0;font-size:13px;color:#cbd5e1}
+  .options{display:flex;flex-wrap:wrap;gap:6px}
+  .options button{
+    padding:4px 6px;border:none;border-radius:6px;background:#334155;color:#fff;
+    cursor:pointer;font-size:13px
+  }
+  .options button:hover{background:#3b82f6}
+  .toggle-btn{
+    position:absolute;right:10px;top:5px;
+    background:rgba(59,130,246,.8);color:#fff;
+    border:none;border-radius:6px;padding:2px 8px;
+    cursor:pointer;font-size:12px
+  }
+  .toggle-btn:hover{background:rgba(37,99,235,.95)}
+
+  /* 拍照按鈕與預覽卡 */
+  .btn{position:fixed;right:12px;bottom:60px;padding:8px 12px;background:rgba(30,41,59,.85);color:#fff;border:none;border-radius:10px;cursor:pointer;z-index:30}
+  .btn:hover{background:rgba(59,130,246,.9)}
+  .badge{position:fixed;left:12px;bottom:12px;background:rgba(15,23,42,.6);border:1px solid rgba(148,163,184,.25);padding:6px 8px;border-radius:10px;font-size:12px;opacity:.85;z-index:30}
+  .badge[hidden]{display:none}
+  .preview{position:fixed;right:12px;bottom:120px;width:280px;background:rgba(15,23,42,.95);border:1px solid rgba(148,163,184,.25);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.35);display:none;overflow:hidden;backdrop-filter:blur(6px);z-index:50}
+  .preview-header{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid rgba(148,163,184,.2);font-size:13px}
+  .preview-body{padding:10px}
+  .preview-img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;background:#111827}
+  .preview-actions{display:flex;gap:8px;padding:10px}
+  .btn-ghost,.btn-primary{flex:1;padding:8px 10px;border:none;border-radius:10px;cursor:pointer}
+  .btn-ghost{background:rgba(51,65,85,.85);color:#e5e7eb}
+  .btn-ghost:hover{background:rgba(71,85,105,.9)}
+  .btn-primary{background:rgba(59,130,246,.9);color:#fff;text-align:center;text-decoration:none}
+  .btn-primary:hover{background:rgba(37,99,235,.95)}
+  .close-x{appearance:none;border:none;background:transparent;color:#94a3b8;font-size:18px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px}
+  .close-x:hover{background:rgba(148,163,184,.15);color:#e2e8f0}
+</style>
+</head>
+<body>
+  <div id="panorama"></div>
+
+  <!-- 人物（會被合成） -->
+  <div class="character" id="character">
+    <img id="head" src="./images/head1.png" alt="head">
+    <img id="body" src="./images/body1.png" alt="body">
+  </div>
+
+  <!-- 國旗（PNG，會被合成） -->
+  <div class="flag" id="flag"><img id="flagImg" src="./images/flag1.png" alt="flag"></div>
+
+  <!-- 底部控制面板（展開/收合） -->
+  <div class="controls collapsed" id="controls">
+    <button class="toggle-btn" id="toggleBtn">▲</button>
+    <div>
+      <h3>頭</h3>
+      <div class="options" id="headOptions"></div>
+    </div>
+    <div>
+      <h3>身體</h3>
+      <div class="options" id="bodyOptions"></div>
+    </div>
+    <div>
+      <h3>國旗（選單為 emoji，顯示為 PNG）</h3>
+      <div class="options" id="flagOptions"></div>
+    </div>
+  </div>
+
+  <!-- 狀態/拍照/預覽 -->
+  <div id="statusBadge" class="badge" hidden>載入中…</div>
+  <button id="captureBtn" class="btn">📷 拍照</button>
+
+  <div id="previewCard" class="preview" aria-live="polite">
+    <div class="preview-header">
+      <div>拍照預覽</div>
+      <button id="closePreview" class="close-x" title="關閉">✕</button>
+    </div>
+    <div class="preview-body">
+      <img id="previewImg" class="preview-img" alt="擷取預覽">
+    </div>
+    <div class="preview-actions">
+      <button id="retakeBtn" class="btn-ghost">關閉</button>
+      <a id="downloadBtn" class="btn-primary" download>下載</a>
+    </div>
+  </div>
+
+  <!-- 保留 WebGL 繪圖緩衝，降低黑屏風險 -->
+  <script>
+    (function monkeyPatchPreserveDrawingBuffer(){
+      const orig = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function(type, attrs){
+        if (type === 'webgl' || type === 'experimental-webgl') {
+          attrs = Object.assign({}, attrs, { preserveDrawingBuffer: true });
+        }
+        return orig.call(this, type, attrs);
+      };
+    })();
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+  <script>
+    // ===== 初始化 Pannellum =====
+    const viewer = pannellum.viewer('panorama', {
+      type: 'equirectangular',
+      panorama: 'panorama_mei.jpg', // 換成你的全景圖
+      autoLoad: true,
+      showZoomCtrl: true,
+      showFullscreenCtrl: true,
+      hfov: 100, minHfov: 50, maxHfov: 120,
+      pitch: 0, yaw: 0,
+      backgroundColor: [15, 23, 42]
     });
-  });
-</script>
+    window.viewer = viewer;
+
+    // ===== 頭/身體圖片、國旗對應表 =====
+    const headImages = Array.from({length: 10}, (_,i)=>`./images/head${i+1}.png`);
+    const bodyImages = Array.from({length: 10}, (_,i)=>`./images/body${i+1}.png`);
+
+    // emoji 選項（11 個，順序對應 flag1.png ~ flag11.png）
+    const flagEmojis = ["🇹🇼","🇰🇷","🇻🇳","🇭🇰","🇨🇳","🇲🇾","🇯🇵","🇩🇪","🇺🇸","🇬🇧","🏴"];
+    const flagPngs   = Array.from({length: 11}, (_,i)=>`./images/flag${i+1}.png`);
+
+    // ===== DOM =====
+    const panoEl = document.getElementById('panorama');
+    const headEl = document.getElementById('head');
+    const bodyEl = document.getElementById('body');
+    const flagImgEl = document.getElementById('flagImg');
+
+    const headBox = document.getElementById('headOptions');
+    const bodyBox = document.getElementById('bodyOptions');
+    const flagBox = document.getElementById('flagOptions');
+
+    const controls = document.getElementById('controls');
+    const toggleBtn = document.getElementById('toggleBtn');
+
+    const badge = document.getElementById('statusBadge');
+    const captureBtn  = document.getElementById('captureBtn');
+    const previewCard = document.getElementById('previewCard');
+    const previewImg  = document.getElementById('previewImg');
+    const closeBtn    = document.getElementById('closePreview');
+    const retakeBtn   = document.getElementById('retakeBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    let currentBlobUrl = null;
+    let ready = false;
+    viewer.on('load', ()=>{ ready = true; });
+
+    function setBadge(text, show=true){ badge.textContent = text; badge.hidden = !show; }
+    function showPreviewWithBlob(blob){
+      if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+      currentBlobUrl = URL.createObjectURL(blob);
+      previewImg.src = currentBlobUrl;
+      const ts = new Date().toISOString().replace(/[:.]/g,'-');
+      downloadBtn.href = currentBlobUrl;
+      downloadBtn.download = `panorama_capture_${ts}.png`;
+      previewCard.style.display = 'block';
+    }
+    function hidePreview(){
+      previewCard.style.display = 'none';
+      if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+      currentBlobUrl = null;
+      previewImg.removeAttribute('src');
+      downloadBtn.removeAttribute('href');
+    }
+
+    // 渲染底部選項
+    function renderImageOptions(box, items, targetEl){
+      items.forEach((src, idx)=>{
+        const btn = document.createElement('button');
+        btn.textContent = idx+1;
+        btn.addEventListener('click', ()=>{ targetEl.src = src; });
+        box.appendChild(btn);
+      });
+    }
+    function renderFlagOptions(box, emojiList, pngList, targetImgEl){
+      emojiList.forEach((emoji, idx)=>{
+        const btn = document.createElement('button');
+        btn.textContent = emoji;
+        btn.addEventListener('click', ()=>{ targetImgEl.src = pngList[idx]; });
+        box.appendChild(btn);
+      });
+    }
+    renderImageOptions(headBox, headImages, headEl);
+    renderImageOptions(bodyBox, bodyImages, bodyEl);
+    renderFlagOptions(flagBox, flagEmojis, flagPngs, flagImgEl);
+
+    // 展開/收合
+    toggleBtn.addEventListener('click', ()=>{
+      controls.classList.toggle('collapsed');
+      toggleBtn.textContent = controls.classList.contains('collapsed') ? '▲' : '▼';
+    });
+
+    // ===== 合成：讀 Pannellum 畫面 + 疊上頭/身體/國旗PNG =====
+    async function captureComposite(){
+      const r = viewer.getRenderer?.();
+      if (!r || !r.getCanvas) throw new Error('無法取得 renderer/canvas');
+      const glCanvas = r.getCanvas();
+      const gl = glCanvas.getContext('webgl') || glCanvas.getContext('experimental-webgl');
+      if (!gl) throw new Error('沒有 WebGL context');
+
+      const W = glCanvas.width, H = glCanvas.height;
+      if (!W || !H) throw new Error('Canvas 尺寸為 0');
+
+      // 微移 yaw 觸發完整渲染，避免靜止時只畫背景
+      const oldYaw = viewer.getYaw();
+      viewer.setYaw(oldYaw + 0.0001);
+      r.render?.();
+      viewer.setYaw(oldYaw);
+      await new Promise(requestAnimationFrame);
+
+      // 1) 讀取 WebGL 畫面
+      const pixels = new Uint8Array(W * H * 4);
+      try {
+        gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      } catch (e) {
+        throw new Error('readPixels 失敗：' + (e && e.message ? e.message : e));
+      }
+
+      // 2) 複製到 2D canvas（處理 Y 翻轉）
+      const out = document.createElement('canvas');
+      out.width = W; out.height = H;
+      const ctx = out.getContext('2d');
+      const imgData = ctx.createImageData(W, H);
+      for (let y = 0; y < H; y++) {
+        const srcRow = H - 1 - y;
+        imgData.data.set(
+          pixels.subarray(srcRow * W * 4, (srcRow + 1) * W * 4),
+          y * W * 4
+        );
+      }
+      ctx.putImageData(imgData, 0, 0);
+
+      // 3) 疊上「頭/身體/國旗PNG」
+      const dpr = window.devicePixelRatio || 1;
+      const panoRect = panoEl.getBoundingClientRect();
+
+      function drawImgAtElement(imgEl){
+        if (!imgEl.complete) return; // 還沒載入就略過
+        const rEl = imgEl.getBoundingClientRect();
+        const x = (rEl.left - panoRect.left) * dpr;
+        const y = (rEl.top  - panoRect.top)  * dpr;
+        const w = rEl.width  * dpr;
+        const h = rEl.height * dpr;
+        if (w>0 && h>0) ctx.drawImage(imgEl, x, y, w, h);
+      }
+
+      drawImgAtElement(headEl);
+      drawImgAtElement(bodyEl);
+      drawImgAtElement(flagImgEl); // ← 國旗用 PNG 了
+
+      // 4) 產生 Blob
+      const blob = await new Promise(res => out.toBlob(res, 'image/png'));
+      if (!blob) throw new Error('輸出 Blob 失敗');
+      return blob;
+    }
+
+    // ===== 拍照事件 =====
+    captureBtn.addEventListener('click', async ()=>{
+      try{
+        if (!ready){ setBadge('圖片載入中…', true); return; }
+        setBadge('擷取中…', true);
+        const blob = await captureComposite();
+        showPreviewWithBlob(blob);
+        setBadge('已擷取', true);
+        setTimeout(()=>setBadge('', false), 800);
+      }catch(err){
+        setBadge('', false);
+        alert('拍照失敗：' + (err && err.message ? err.message : err));
+      }
+    });
+
+    document.getElementById('closePreview').addEventListener('click', hidePreview);
+    document.getElementById('retakeBtn').addEventListener('click', hidePreview);
+  </script>
+</body>
+</html>
