@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Pannellum 截圖 + 人物拼圖 + 國旗PNG（emoji選單）</title>
+<title>Pannellum + 拼圖人物 + 國旗PNG + 拍照 + 音訊同意</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
 <style>
@@ -12,41 +12,23 @@
   #panorama{position:absolute;inset:0;z-index:0}
 
   /* 中央人物與右側國旗（會被合成） */
-  .character{
-    position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-    display:flex;flex-direction:column;align-items:center;z-index:20;
-    pointer-events:none;
-  }
+  .character{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    display:flex;flex-direction:column;align-items:center;z-index:20;pointer-events:none;}
   .character img{max-width:150px;height:auto;display:block;}
-  .flag{
-    position:fixed;top:50%;right:12px;transform:translateY(-50%);
-    z-index:20;pointer-events:none;
-  }
+  .flag{position:fixed;top:50%;right:12px;transform:translateY(-50%);
+    z-index:20;pointer-events:none;}
   .flag img{height:64px;width:auto;display:block}
 
   /* 底部控制面板（可收合；不會被截圖） */
-  .controls{
-    position:fixed;left:0;right:0;bottom:0;
-    background:rgba(15,23,42,.9);backdrop-filter:blur(6px);
-    border-top:1px solid rgba(148,163,184,.3);
-    max-height:40%;overflow-y:auto;
-    transition:transform 0.3s ease;
-    z-index:40;padding:10px;
-  }
+  .controls{position:fixed;left:0;right:0;bottom:0;background:rgba(15,23,42,.9);backdrop-filter:blur(6px);
+    border-top:1px solid rgba(148,163,184,.3);max-height:40%;overflow-y:auto;
+    transition:transform 0.3s ease;z-index:40;padding:10px;}
   .controls.collapsed{ transform:translateY(calc(100% - 30px)); }
   .controls h3{margin:6px 0;font-size:13px;color:#cbd5e1}
   .options{display:flex;flex-wrap:wrap;gap:6px}
-  .options button{
-    padding:4px 6px;border:none;border-radius:6px;background:#334155;color:#fff;
-    cursor:pointer;font-size:13px
-  }
+  .options button{padding:4px 6px;border:none;border-radius:6px;background:#334155;color:#fff;cursor:pointer;font-size:13px}
   .options button:hover{background:#3b82f6}
-  .toggle-btn{
-    position:absolute;right:10px;top:5px;
-    background:rgba(59,130,246,.8);color:#fff;
-    border:none;border-radius:6px;padding:2px 8px;
-    cursor:pointer;font-size:12px
-  }
+  .toggle-btn{position:absolute;right:10px;top:5px;background:rgba(59,130,246,.8);color:#fff;border:none;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px}
   .toggle-btn:hover{background:rgba(37,99,235,.95)}
 
   /* 拍照按鈕與預覽卡 */
@@ -66,10 +48,21 @@
   .btn-primary:hover{background:rgba(37,99,235,.95)}
   .close-x{appearance:none;border:none;background:transparent;color:#94a3b8;font-size:18px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px}
   .close-x:hover{background:rgba(148,163,184,.15);color:#e2e8f0}
+
+  /* 音訊同意視窗（每次進站詢問） */
+  .modal-backdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter: blur(6px);}
+  .modal-card{width:min(92vw, 420px);background:rgba(15,23,42,.96);border:1px solid rgba(148,163,184,.25);border-radius:14px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.45);color:#e2e8f0;}
+  .modal-card h3{margin:0 0 6px;font-size:16px;}
+  .modal-tip{margin:0 0 10px;font-size:13px;color:#cbd5e1;opacity:.9;}
+  .modal-actions{display:flex;gap:8px;}
+  .modal-actions button{flex:1;padding:10px 12px;border:none;border-radius:10px;cursor:pointer;font-size:14px}
+  .modal-actions .btn-primary{background:rgba(59,130,246,.95);color:#fff;}
+  .modal-actions .btn-primary:hover{background:rgba(37,99,235,.98);}
+  .modal-actions .btn-ghost{background:rgba(51,65,85,.85);color:#e5e7eb;}
+  .modal-actions .btn-ghost:hover{background:rgba(71,85,105,.95);}
 </style>
 </head>
 <body>
-<audio id="bgAudio" src="audio.mp3" autoplay></audio>
   <div id="panorama"></div>
 
   <!-- 人物（會被合成） -->
@@ -84,37 +77,51 @@
   <!-- 底部控制面板（展開/收合） -->
   <div class="controls collapsed" id="controls">
     <button class="toggle-btn" id="toggleBtn">▲</button>
-    <div>
-      <h3>頭</h3>
-      <div class="options" id="headOptions"></div>
-    </div>
-    <div>
-      <h3>身體</h3>
-      <div class="options" id="bodyOptions"></div>
-    </div>
-    <div>
-      <h3>國旗（選單為 emoji，顯示為 PNG）</h3>
-      <div class="options" id="flagOptions"></div>
-    </div>
+    <div><h3>頭</h3><div class="options" id="headOptions"></div></div>
+    <div><h3>身體</h3><div class="options" id="bodyOptions"></div></div>
+    <div><h3>國旗（選單為 emoji，顯示為 PNG）</h3><div class="options" id="flagOptions"></div></div>
   </div>
 
   <!-- 狀態/拍照/預覽 -->
   <div id="statusBadge" class="badge" hidden>載入中…</div>
   <button id="captureBtn" class="btn">📷 拍照</button>
-
   <div id="previewCard" class="preview" aria-live="polite">
     <div class="preview-header">
       <div>拍照預覽</div>
       <button id="closePreview" class="close-x" title="關閉">✕</button>
     </div>
-    <div class="preview-body">
-      <img id="previewImg" class="preview-img" alt="擷取預覽">
-    </div>
+    <div class="preview-body"><img id="previewImg" class="preview-img" alt="擷取預覽"></div>
     <div class="preview-actions">
       <button id="retakeBtn" class="btn-ghost">關閉</button>
       <a id="downloadBtn" class="btn-primary" download>下載</a>
     </div>
   </div>
+
+  <!-- 音訊 -->
+  <audio id="bgAudio" src="audio.mp3" preload="auto" playsinline></audio>
+  <div id="audioConsent" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="audioTitle">
+    <div class="modal-card">
+      <h3 id="audioTitle">允許播放聲音嗎？</h3>
+      <p class="modal-tip">本頁有音效，按「允許播放」後將開始播放。</p>
+      <div class="modal-actions">
+        <button id="allowAudio" class="btn-primary">允許播放</button>
+        <button id="denyAudio" class="btn-ghost">稍後再說</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 音訊同意（每次會詢問；同意後播放；不 loop） -->
+  <script>
+    (function setupAudioConsent(){
+      const audioEl = document.getElementById('bgAudio');
+      const modal   = document.getElementById('audioConsent');
+      document.getElementById('allowAudio').addEventListener('click', async ()=>{
+        try { await audioEl.play(); } catch(e){ console.warn('播放失敗：', e); }
+        modal.remove();
+      });
+      document.getElementById('denyAudio').addEventListener('click', ()=> modal.remove());
+    })();
+  </script>
 
   <!-- 保留 WebGL 繪圖緩衝，降低黑屏風險 -->
   <script>
@@ -144,11 +151,9 @@
     });
     window.viewer = viewer;
 
-    // ===== 頭/身體圖片、國旗對應表 =====
+    // ===== 選單資料 =====
     const headImages = Array.from({length: 10}, (_,i)=>`./images/head${i+1}.png`);
     const bodyImages = Array.from({length: 10}, (_,i)=>`./images/body${i+1}.png`);
-
-    // emoji 選項（11 個，順序對應 flag1.png ~ flag11.png）
     const flagEmojis = ["🇹🇼","🇰🇷","🇻🇳","🇭🇰","🇨🇳","🇲🇾","🇯🇵","🇩🇪","🇺🇸","🇬🇧","🏴"];
     const flagPngs   = Array.from({length: 11}, (_,i)=>`./images/flag${i+1}.png`);
 
@@ -267,7 +272,7 @@
       const panoRect = panoEl.getBoundingClientRect();
 
       function drawImgAtElement(imgEl){
-        if (!imgEl.complete) return; // 還沒載入就略過
+        if (!imgEl.complete) return; // 圖尚未載入就略過
         const rEl = imgEl.getBoundingClientRect();
         const x = (rEl.left - panoRect.left) * dpr;
         const y = (rEl.top  - panoRect.top)  * dpr;
@@ -278,7 +283,7 @@
 
       drawImgAtElement(headEl);
       drawImgAtElement(bodyEl);
-      drawImgAtElement(flagImgEl); // ← 國旗用 PNG 了
+      drawImgAtElement(flagImgEl); // 國旗用 PNG 疊上去
 
       // 4) 產生 Blob
       const blob = await new Promise(res => out.toBlob(res, 'image/png'));
@@ -301,8 +306,8 @@
       }
     });
 
-    document.getElementById('closePreview').addEventListener('click', hidePreview);
-    document.getElementById('retakeBtn').addEventListener('click', hidePreview);
+    closeBtn.addEventListener('click', hidePreview);
+    retakeBtn.addEventListener('click', hidePreview);
   </script>
 </body>
 </html>
